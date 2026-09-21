@@ -1,0 +1,14 @@
+#!/ bin / bash
+#PBS -N hello_c # Job name
+#PBS -o ./hello_c.out # Output files
+#PBS -e ./hello_c.err # Error files
+#PBS -q shortCPUQ # Queue name
+#PBS -l walltime=0:02:00 # Set the maximum wall time
+#PBS -l select=1:ncpus=1
+#PBS -l mem=1mb # Set the memory # Load modules
+module load GCC/13.3.0
+# Select the working directory
+cd / home / username / testFolder
+# Compile and run ( sequential code )
+gcc hello . c -o hello
+./ hello

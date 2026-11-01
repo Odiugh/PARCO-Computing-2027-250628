@@ -109,14 +109,9 @@ static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col)
 {
     size_t index = row*N + col;
 
-    return data[index - N - 1] +
-        data[index - N] +
-        data[index - N + 1] +
-        data[index - 1] +
-        data[index + 1] +
-        data[index + N - 1] +
-        data[index + N] +
-        data[index + N + 1];
+    return data[index - N - 1] + data[index - N] + data[index - N + 1] +
+        data[index - 1] + /* the cell itself */ + data[index + 1] +
+        data[index + N - 1] + data[index + N] + data[index + N + 1];
 }
 
 static inline _Bool is_alive(CELL_TYPE* data, size_t row, size_t col)
@@ -144,7 +139,7 @@ static inline _Bool is_alive_outer(CELL_TYPE* data, size_t row, size_t col)
     return n == 3 || (n == 2 && data[row*N + col]);
 }
 
-int simulate(CELL_TYPE **m0, CELL_TYPE **m1, size_t cycles)
+int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
 {
     if(!m0 || !m1) return 1;
 
@@ -158,7 +153,6 @@ int simulate(CELL_TYPE **m0, CELL_TYPE **m1, size_t cycles)
                 d1[i*N + j] = is_alive(d0, i, j);
             }
         }
-    */
 #else // Assuming N>=4 borders are computed manually and the for loop is only used for inner data, skipping checks
     for(size_t t = 0; t < cycles; ++t){
 
@@ -168,17 +162,17 @@ int simulate(CELL_TYPE **m0, CELL_TYPE **m1, size_t cycles)
 
         for(size_t i = 1; i < N-1; ++i){
 
-            d1[i*N] = is_alive_outer(d1, i, 0);
+            d1[i*N] = is_alive_outer(d0, i, 0);
 
             for(size_t j = 1; j < N-1; ++j){
                 d1[i*N + j] = is_alive_inner(d0, i, j);
             }
 
-            d1[i*N + N - 1] = is_alive_outer(d1, i, N-1);
+            d1[i*N + N - 1] = is_alive_outer(d0, i, N-1);
         }
 
         for(size_t j = 0; j < N; ++j){
-            d1[(N-1 * N) + j] = is_alive_outer(d0, 0, j);
+            d1[(N-1) * N + j] = is_alive_outer(d0, N-1, j);
         }
 #endif
 

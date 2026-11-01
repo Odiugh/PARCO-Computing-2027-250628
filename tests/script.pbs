@@ -1,0 +1,15 @@
+#!/ bin / bash
+
+#PBS -N hello_c
+#PBS -o ./hello_c.out
+#PBS -e ./hello_c.err
+#PBS -q shortCPUQ
+#PBS -l walltime=0:10:00
+#PBS -l select=1:ncpus=32:mem=32gb
+
+module load GCC/13.3.0
+
+cd / home / username / testFolder
+
+gcc hello . c -o hello
+./ hello

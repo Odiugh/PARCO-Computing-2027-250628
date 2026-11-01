@@ -10,26 +10,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
+#include <sys/time.h>
 
 // ----- Definitions ----- //
 
 // Game logic constants 
-#define UNDERPOPULATION_THRESHOLD 1 // max number of neighbors to count as underpopulation
-#define OVERPOPULATION_THRESHOLD 4 // min number of neighbors to count as overpopulation
-#define REPRODUCTION_VALUE 3 // number of neighbors to spawn a new cell
+#define UNDERPOPULATION_THRESHOLD 1 // max number of neighbours to count as underpopulation
+#define OVERPOPULATION_THRESHOLD 4 // min number of neighbours to count as overpopulation
+#define REPRODUCTION_VALUE 3 // number of neighbours to spawn a new cell
 #define CELL_TYPE unsigned char
 #define BUFFER_SIZE (N * N * sizeof(CELL_TYPE))
 
 // Game simulation constants
-#define N 50 // world size
-#define T 50// computed steps
-#define DEBUG 1
+#define N 500 // world size, >=4
+#define T 10000// computed steps
+#define DEBUG 0
 
-// Count neighbors for cell at row,col
-size_t neighbors(CELL_TYPE** world, size_t row, size_t col);
+// Count neighbours for cell at row,col
+static inline size_t neighbours_outer(CELL_TYPE* world, size_t row, size_t col);
+static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col);
 
 // Determine if cell at row,col is alive
-static inline _Bool is_alive(CELL_TYPE** world, size_t row, size_t col);
+static inline _Bool is_alive(CELL_TYPE* world, size_t row, size_t col);
+static inline _Bool is_alive_inner(CELL_TYPE* world, size_t row, size_t col);
+static inline _Bool is_alive_outer(CELL_TYPE* world, size_t row, size_t col);
 
 // Allocate in memory a NxN matrix and initialize all values to 0
 CELL_TYPE** alloc_world();
@@ -46,6 +51,12 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles);
 // Load world from txt file
 int load_world(CELL_TYPE** m, char* filename);
 
+// Global structs for timekeeping
+struct timeval start, end;
+// Timer functions for code cleanness
+static inline int start_timer();
+static inline double stop_timer();
+
 // ----- Global Variables ----- //
 
 
@@ -58,46 +69,134 @@ int main(){
     CELL_TYPE** m1 = alloc_world();
 
     load_world(m0, "start.txt");
+    //load_world(m0, "RANDOM");
+
+    //warmup
+    simulate(m0,m1, 100);
+
+    start_timer();
 
     simulate(m0, m1, T);
+	
+	printf("Time = %.6f seconds\n", stop_timer());
+
+    free_world(m0);
+    free_world(m1);
 
     return 0;
 }
 
 // ----- Implementations ----- //
 
-size_t neighbors(CELL_TYPE** world, size_t row, size_t col)
+static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
 {
-    if(!world) return 0;
-    
-    size_t neighbors = 0;
+    size_t neighbours = 0;
     for(long long int i = (long long)row-1; i <= (long long)row+1; ++i){
+        if(i < 0 || i >= N) continue; // branch prediction makes it faster to check bounds after for
         for(long long int j = (long long)col-1; j <= (long long)col+1; ++j){
             if(
-                i >= 0 && // i in bounds
-                i < N &&
-                j >= 0 && // j in bounds
+                j >= 0 && // j in bounds, upper column bound and row bounds can be checked in for condition
                 j < N &&
-                !(i == (long long)row && j == (long long)col) && // not the cell itself
-                world[i][j] // neighbour is alive
-            ) ++neighbors;
+                data[i*N + j] // neighbour is alive
+            ) ++neighbours;
         }
     }
 
-    return neighbors;
+    return neighbours - data[row*N + col]; // the cell itself is counted as a neighbour
 }
 
-static inline _Bool is_alive(CELL_TYPE** world, size_t row, size_t col)
+static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col)
 {
-    if(!world || row >= N || col >= N) return 0;
+    size_t index = row*N + col;
 
-    size_t n = neighbors(world, row, col);
+    return data[index - N - 1] +
+        data[index - N] +
+        data[index - N + 1] +
+        data[index - 1] +
+        data[index + 1] +
+        data[index + N - 1] +
+        data[index + N] +
+        data[index + N + 1];
+}
 
-    return (
-        world[row][col] ? (
-            n > UNDERPOPULATION_THRESHOLD && n < OVERPOPULATION_THRESHOLD ? 1 : 0
-        ) : n == REPRODUCTION_VALUE ? 1 : 0
-    );
+static inline _Bool is_alive(CELL_TYPE* data, size_t row, size_t col)
+{
+    size_t n; 
+    if(row == 0 || row == N-1 || col == 0 || col == N-1) // row and col bound checks get skipped in not on border
+        n = neighbours_outer(data, row, col);
+    else
+        n = neighbours_inner(data, row, col);
+
+    return n == 3 || (n == 2 && data[row*N + col]);
+}
+
+static inline _Bool is_alive_inner(CELL_TYPE* data, size_t row, size_t col)
+{
+    size_t n = neighbours_inner(data, row, col);
+
+    return n == 3 || (n == 2 && data[row*N + col]);
+}
+
+static inline _Bool is_alive_outer(CELL_TYPE* data, size_t row, size_t col)
+{
+    size_t n = neighbours_outer(data, row, col);
+
+    return n == 3 || (n == 2 && data[row*N + col]);
+}
+
+int simulate(CELL_TYPE **m0, CELL_TYPE **m1, size_t cycles)
+{
+    if(!m0 || !m1) return 1;
+
+    CELL_TYPE *d0 = m0[0], *d1 = m1[0]; 
+    typeof(d0) tmp;
+
+#if N < 4
+    for(size_t t = 0; t < cycles; ++t){
+        for(size_t i = 0; i < N; ++i){
+            for(size_t j = 0; j < N; ++j){
+                d1[i*N + j] = is_alive(d0, i, j);
+            }
+        }
+    */
+#else // Assuming N>=4 borders are computed manually and the for loop is only used for inner data, skipping checks
+    for(size_t t = 0; t < cycles; ++t){
+
+        for(size_t j = 0; j < N; ++j){
+            d1[j] = is_alive_outer(d0, 0, j);
+        }
+
+        for(size_t i = 1; i < N-1; ++i){
+
+            d1[i*N] = is_alive_outer(d1, i, 0);
+
+            for(size_t j = 1; j < N-1; ++j){
+                d1[i*N + j] = is_alive_inner(d0, i, j);
+            }
+
+            d1[i*N + N - 1] = is_alive_outer(d1, i, N-1);
+        }
+
+        for(size_t j = 0; j < N; ++j){
+            d1[(N-1 * N) + j] = is_alive_outer(d0, 0, j);
+        }
+#endif
+
+        // Swamp buffers to avoid rewriting
+        tmp = d0;
+        d0 = d1;
+        d1 = tmp;
+
+#if DEBUG
+        print_world(m1, m0, t, 0);
+        usleep(100000);
+        typeof(m0) mtmp = m0;
+        m0 = m1;
+        m1 = mtmp;
+#endif        
+    }
+
+    return 0;
 }
 
 CELL_TYPE** alloc_world()
@@ -135,12 +234,57 @@ int free_world(CELL_TYPE** world)
     return 0;
 }
 
+int load_world(CELL_TYPE **m, char *filename)
+{
+    if(!m || !filename) return 1;
+
+    if(!strcmp(filename, "RANDOM")){
+        srand(time(NULL));
+        for (size_t i = 0; i < N; ++i) {
+            for (size_t j = 0; j < N; ++j) {
+                m[i][j] = rand()%2;
+            }
+        }
+    }
+
+    FILE *f = fopen(filename, "r");
+    if (!f) return 1;
+
+    char ch;
+    for (size_t i = 0; i < N; ++i) {
+        for (size_t j = 0; j < N; ) {
+            // " %1c" automatically skips all whitespace/newlines
+            if (fscanf(f, "%1c", &ch) != 1) break;
+
+            if(ch == '\n') break;
+            else m[i][j++] = ch == '1' ? 1 : 0;
+        }
+    }
+
+    fclose(f);
+
+    return 0;
+}
+
+static inline int start_timer()
+{
+    return gettimeofday(&start, NULL);
+}
+
+static inline double stop_timer()
+{
+    gettimeofday(&end, NULL);
+
+	return (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000000.0;
+}
+
+
 int print_world(CELL_TYPE **world, CELL_TYPE **old_world, size_t iteration, _Bool color)
 {
     if(!world || !old_world) return 1;
 
     // Clear screen;
-    system("clear");
+    //system("clear");
 
     // Iteration number logging
     printf("Iteration %li ", iteration);
@@ -169,61 +313,6 @@ int print_world(CELL_TYPE **world, CELL_TYPE **old_world, size_t iteration, _Boo
     for(size_t i = 0; i < N; ++i)
         printf("--");
     printf("\n");
-
-    return 0;
-}
-
-int simulate(CELL_TYPE **m0, CELL_TYPE **m1, size_t cycles)
-{
-    if(!m0 || !m1) return 1;
-
-    for(size_t t = 0; t < cycles; ++t){
-        for(size_t i = 0; i < N; ++i){
-            for(size_t j = 0; j < N; ++j){
-                m1[i][j] = is_alive(m0, i, j);
-            }
-        }
-
-#if DEBUG
-        print_world(m1, m0, t, 0);
-        sleep(1);
-#endif        
-
-        // Swamp buffers to avoid rewriting
-        CELL_TYPE** tmp = m0;
-        m0 = m1;
-        m1 = tmp;
-    }
-
-    // Reswap the buffers if cycles are not even
-    if(!(cycles%2)){
-        CELL_TYPE** tmp = m0;
-        m0 = m1;
-        m1 = tmp;
-    }
-
-    return 0;
-}
-
-int load_world(CELL_TYPE **m, char *filename)
-{
-    if(!m || !filename) return 1;
-
-    FILE *f = fopen(filename, "r");
-    if (!f) return 1;
-
-    char ch;
-    for (size_t row = 0; row < N; ++row) {
-        for (size_t col = 0; col < N; ) {
-            // " %1c" automatically skips all whitespace/newlines
-            if (fscanf(f, "%1c", &ch) != 1) break;
-
-            if(ch == '\n') break;
-            else m[row][col++] = ch == '1' ? 1 : 0;
-        }
-    }
-
-    fclose(f);
 
     return 0;
 }

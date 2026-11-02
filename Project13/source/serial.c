@@ -16,18 +16,16 @@
 // ----- Definitions ----- //
 
 // Game logic constants 
-#define UNDERPOPULATION_THRESHOLD 1 // max number of neighbours to count as underpopulation
-#define OVERPOPULATION_THRESHOLD 4 // min number of neighbours to count as overpopulation
-#define REPRODUCTION_VALUE 3 // number of neighbours to spawn a new cell
 #define CELL_TYPE unsigned char
 #define BUFFER_SIZE (N * N * sizeof(CELL_TYPE))
 
 // Game simulation constants
-#define N 500 // world size, >=4
-#define T 10000// computed steps
+#define N 5000 // world size, >=4
+#define T 100// computed steps
 #define DEBUG 0
 
 // Count neighbours for cell at row,col
+static inline size_t neighbours(CELL_TYPE* data, size_t row, size_t col);
 static inline size_t neighbours_outer(CELL_TYPE* world, size_t row, size_t col);
 static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col);
 
@@ -57,10 +55,6 @@ struct timeval start, end;
 static inline int start_timer();
 static inline double stop_timer();
 
-// ----- Global Variables ----- //
-
-
-
 // ----- Main ----- //
 
 int main(){
@@ -68,7 +62,7 @@ int main(){
     CELL_TYPE** m0 = alloc_world();
     CELL_TYPE** m1 = alloc_world();
 
-    load_world(m0, "start.txt");
+    load_world(m0, "RANDOM");
     //load_world(m0, "RANDOM");
 
     //warmup
@@ -78,7 +72,8 @@ int main(){
 
     simulate(m0, m1, T);
 	
-	printf("Time = %.6f seconds\n", stop_timer());
+    double dt = stop_timer();
+	printf("%.6f\n", dt);
 
     free_world(m0);
     free_world(m1);
@@ -88,7 +83,7 @@ int main(){
 
 // ----- Implementations ----- //
 
-static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
+static inline size_t neighbours(CELL_TYPE* data, size_t row, size_t col)
 {
     size_t neighbours = 0;
     for(long long int i = (long long)row-1; i <= (long long)row+1; ++i){
@@ -105,6 +100,45 @@ static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
     return neighbours - data[row*N + col]; // the cell itself is counted as a neighbour
 }
 
+static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
+{
+    size_t index = row*N + col;
+    
+    // Unraveld loop, skips the use of i,j and the checks on them
+    // Assuming row == 0 || col == 0
+    if(row == 0){
+        if(col == 0){ // top left edge
+            return /* the cell itself*/ data[index + 1] +
+                data[index + N] + data[index + N + 1];
+        } else if (col == N){ // top right
+            return data[index - 1] + /* the cell itself */
+                data[index + N - 1] + data[index + N];
+        } else {
+            return data[index - 1] + /* the cell itself */ data[index + 1] +
+                data[index + N - 1] + data[index + N] + data[index + N + 1];
+        }
+    } else if (row == N){
+        if(col == 0){ // bottom right
+            return data[index - N] + data[index - N + 1] +
+                /* the cell itself */ data[index + 1];
+        } else if (col == N){ // bottom left
+            return data[index - N - 1] + data[index - N] +
+                data[index - 1]; /* the cell itself */
+        } else {
+            return data[index - N - 1] + data[index - N] + data[index - N + 1] +
+                data[index - 1] + /* the cell itself */ data[index + 1];
+        }
+    } else if (col == 0){ // corners are skipped because they are handled by row == 0,N
+        return data[index - N] + data[index - N + 1] +
+            /* the cell itself */ data[index + 1] +
+            data[index + N] + data[index + N + 1];
+    } else { // col == N -> outer is used only in this 4 cases
+        return data[index - N - 1] + data[index - N] +
+            data[index - 1] + /* the cell itself */
+            data[index + N - 1] + data[index + N];
+    }
+}
+
 static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col)
 {
     size_t index = row*N + col;
@@ -118,7 +152,7 @@ static inline _Bool is_alive(CELL_TYPE* data, size_t row, size_t col)
 {
     size_t n; 
     if(row == 0 || row == N-1 || col == 0 || col == N-1) // row and col bound checks get skipped in not on border
-        n = neighbours_outer(data, row, col);
+        n = neighbours(data, row, col);
     else
         n = neighbours_inner(data, row, col);
 
@@ -181,7 +215,7 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
         d0 = d1;
         d1 = tmp;
 
-#if DEBUG
+#if DEBUG > 1
         print_world(m1, m0, t, 0);
         usleep(100000);
         typeof(m0) mtmp = m0;

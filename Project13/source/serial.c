@@ -17,20 +17,34 @@
 
 // Game logic constants 
 #define CELL_TYPE unsigned char
-#define BUFFER_SIZE (N * N * sizeof(CELL_TYPE))
+#define BUFFER_SIZE ((size_t)(N) * (N) * sizeof(CELL_TYPE))
 
 // Game simulation constants
-#define N 5000 // world size, >=4
-#define T 100// computed steps
+#ifndef N
+#define N 500
+#endif
+
+#ifndef T
+#define T 500
+#endif
+
+#ifndef PRESET
+#define PRESET "RANDOM"
+#endif
+
+#ifndef DEBUG
 #define DEBUG 0
+#endif
+
+#ifndef RANDSEED
+#define RANDSEED 42
+#endif
 
 // Count neighbours for cell at row,col
-static inline size_t neighbours(CELL_TYPE* data, size_t row, size_t col);
 static inline size_t neighbours_outer(CELL_TYPE* world, size_t row, size_t col);
 static inline size_t neighbours_inner(CELL_TYPE* data, size_t row, size_t col);
 
 // Determine if cell at row,col is alive
-static inline _Bool is_alive(CELL_TYPE* world, size_t row, size_t col);
 static inline _Bool is_alive_inner(CELL_TYPE* world, size_t row, size_t col);
 static inline _Bool is_alive_outer(CELL_TYPE* world, size_t row, size_t col);
 
@@ -62,8 +76,9 @@ int main(){
     CELL_TYPE** m0 = alloc_world();
     CELL_TYPE** m1 = alloc_world();
 
-    load_world(m0, "RANDOM");
-    //load_world(m0, "RANDOM");
+    if(!m0 || !m1) return 1;
+
+    if(load_world(m0, PRESET)) return 2;
 
     //warmup
     simulate(m0,m1, 100);
@@ -110,18 +125,18 @@ static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
         if(col == 0){ // top left edge
             return /* the cell itself*/ data[index + 1] +
                 data[index + N] + data[index + N + 1];
-        } else if (col == N){ // top right
+        } else if (col == N-1){ // top right
             return data[index - 1] + /* the cell itself */
                 data[index + N - 1] + data[index + N];
         } else {
             return data[index - 1] + /* the cell itself */ data[index + 1] +
                 data[index + N - 1] + data[index + N] + data[index + N + 1];
         }
-    } else if (row == N){
+    } else if (row == N-1){
         if(col == 0){ // bottom right
             return data[index - N] + data[index - N + 1] +
                 /* the cell itself */ data[index + 1];
-        } else if (col == N){ // bottom left
+        } else if (col == N-1){ // bottom left
             return data[index - N - 1] + data[index - N] +
                 data[index - 1]; /* the cell itself */
         } else {
@@ -132,7 +147,7 @@ static inline size_t neighbours_outer(CELL_TYPE* data, size_t row, size_t col)
         return data[index - N] + data[index - N + 1] +
             /* the cell itself */ data[index + 1] +
             data[index + N] + data[index + N + 1];
-    } else { // col == N -> outer is used only in this 4 cases
+    } else { // col == N-1 -> outer is used only in this 4 cases
         return data[index - N - 1] + data[index - N] +
             data[index - 1] + /* the cell itself */
             data[index + N - 1] + data[index + N];
@@ -180,14 +195,7 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
     CELL_TYPE *d0 = m0[0], *d1 = m1[0]; 
     typeof(d0) tmp;
 
-#if N < 4
-    for(size_t t = 0; t < cycles; ++t){
-        for(size_t i = 0; i < N; ++i){
-            for(size_t j = 0; j < N; ++j){
-                d1[i*N + j] = is_alive(d0, i, j);
-            }
-        }
-#else // Assuming N>=4 borders are computed manually and the for loop is only used for inner data, skipping checks
+    // Assuming N>=4 borders are computed manually and the for loop is only used for inner data, skipping checks
     for(size_t t = 0; t < cycles; ++t){
 
         for(size_t j = 0; j < N; ++j){
@@ -208,7 +216,6 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
         for(size_t j = 0; j < N; ++j){
             d1[(N-1) * N + j] = is_alive_outer(d0, N-1, j);
         }
-#endif
 
         // Swamp buffers to avoid rewriting
         tmp = d0;
@@ -216,8 +223,8 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
         d1 = tmp;
 
 #if DEBUG > 1
-        print_world(m1, m0, t, 0);
-        usleep(100000);
+        print_world(m1, m0, t, 1);
+        //usleep(100000);
         typeof(m0) mtmp = m0;
         m0 = m1;
         m1 = mtmp;
@@ -267,28 +274,26 @@ int load_world(CELL_TYPE **m, char *filename)
     if(!m || !filename) return 1;
 
     if(!strcmp(filename, "RANDOM")){
-        srand(time(NULL));
+        srand(RANDSEED);
         for (size_t i = 0; i < N; ++i) {
             for (size_t j = 0; j < N; ++j) {
                 m[i][j] = rand()%2;
             }
         }
+        return 0;
     }
 
     FILE *f = fopen(filename, "r");
     if (!f) return 1;
 
-    char ch;
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < N; ) {
-            // " %1c" automatically skips all whitespace/newlines
-            if (fscanf(f, "%1c", &ch) != 1) break;
-
-            if(ch == '\n') break;
-            else m[i][j++] = ch == '1' ? 1 : 0;
+    size_t k = 0;
+    int ch;
+    while (k < (size_t)N * N && (ch = fgetc(f)) != EOF) {
+        if (ch == '0' || ch == '1') {
+            m[k / N][k % N] = (CELL_TYPE)(ch - '0');
+            ++k;
         }
     }
-
     fclose(f);
 
     return 0;

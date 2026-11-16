@@ -1,2 +1,6 @@
 neighbors count is divided into inner and outer, speeding up inner computations with direct sums
 the world is stored into a continous buffer and addressed directly
+
+ASSUMPTIONS
+n >= 4
+T even

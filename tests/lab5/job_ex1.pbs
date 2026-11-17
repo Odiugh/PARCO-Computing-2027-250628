@@ -1,0 +1,41 @@
+#!/bin/bash
+# Lab 4 - Exercise 1: matrix-vector product y = A * x
+# Submit with:   qsub job_ex1.pbs
+# Check with:    qstat -u $USER
+# Results:       ex1.o (everything the job printed), ex1_results.txt
+
+# Job name
+#PBS -N ex1
+# Output file: normal output AND messages/errors together in ex1.o
+#PBS -o ./ex1.o
+#PBS -j oe
+# Queue name
+#PBS -q shortCPUQ
+# Set the maximum wall time
+#PBS -l walltime=0:10:00
+# One node, 8 cores (we test 1, 2, 4 and 8 threads), 2 GB of memory
+#PBS -l select=1:ncpus=8:mem=2gb
+
+# Modules for C (module prints "Loading ...": that is normal, not an error)
+module load GCC/13.2.0
+gcc --version
+
+# Select the working directory
+cd "$PBS_O_WORKDIR"   # go to the directory where qsub was run
+echo "Running in: $(pwd) on node $(hostname)"
+lscpu | grep -E "Model name|Socket|Core|NUMA node\(s\)"
+
+# Compile (with -fopenmp, otherwise the pragmas are ignored)
+gcc -std=c99 -O2 -Wall -fopenmp ex1_matvec_template.c -o ex1_matvec -lm || exit 1
+
+
+# Show where the 4 threads run (question 3 of Exercise 1)
+# One line per thread: thread number and the CPU(s) it is bound to
+export OMP_AFFINITY_FORMAT="   thread %n of %N  ->  CPU %A"
+echo "== thread placement, 4 threads, close"
+OMP_PLACES=cores OMP_PROC_BIND=close OMP_DISPLAY_AFFINITY=TRUE ./ex1_matvec 1024 4
+echo "== thread placement, 4 threads, spread"
+OMP_PLACES=cores OMP_PROC_BIND=spread OMP_DISPLAY_AFFINITY=TRUE ./ex1_matvec 1024 4
+
+# All measurements
+bash ./run_ex1.sh

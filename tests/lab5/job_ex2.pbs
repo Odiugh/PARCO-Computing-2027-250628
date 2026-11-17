@@ -1,0 +1,33 @@
+#!/bin/bash
+# Lab 4 - Exercise 2: task-parallel merge sort of an edge list
+# Submit with:   qsub job_ex2.pbs
+# Check with:    qstat -u $USER
+# Results:       ex2.o (everything the job printed), ex2_results.txt
+
+# Job name
+#PBS -N ex2
+# Output file: normal output AND messages/errors together in ex2.o
+#PBS -o ./ex2.o
+#PBS -j oe
+# Queue name
+#PBS -q shortCPUQ
+# Set the maximum wall time
+#PBS -l walltime=0:10:00
+# One node, 8 cores (we test 1, 2, 4 and 8 threads), 2 GB of memory
+#PBS -l select=1:ncpus=8:mem=2gb
+
+# Modules for C (module prints "Loading ...": that is normal, not an error)
+module load GCC/13.2.0
+gcc --version
+
+# Select the working directory
+cd "$PBS_O_WORKDIR"   # go to the directory where qsub was run
+echo "Running in: $(pwd) on node $(hostname)"
+lscpu | grep -E "Model name|Socket|Core|NUMA node\(s\)"
+
+# Compile (with -fopenmp, otherwise the pragmas are ignored)
+gcc -std=c99 -O2 -Wall -fopenmp ex2_msort_template.c -o ex2_msort || exit 1
+
+
+# All measurements
+bash ./run_ex2.sh

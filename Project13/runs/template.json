@@ -1,0 +1,20 @@
+{
+    "size": 500,
+    "steps": 500,
+    "version": "omp",
+    "preset": "RANDOM",
+    "debug": 0,
+    "threads": 4,
+    "seed": 42,
+
+    "compiler": "gcc",
+    "compile_options": [
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-std=c23",
+        "-march=native",
+        "-O3",
+        "-fopenmp"
+    ]
+}

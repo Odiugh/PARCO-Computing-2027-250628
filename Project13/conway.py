@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+import json
 
 ##### GLOBAL VARIABLES #####
 
@@ -62,13 +63,8 @@ def main():
 ##### FUNCTIONS #####
 
 def parse_args():
-    global N
-    global T
-    global wordfile
-    global debug_level
-    global version
-    global seed
-    global num_threads
+    global N, T, wordfile, debug_level, version, seed, num_threads
+    global compiler, compile_options
 
     parser = argparse.ArgumentParser(
         description="Test differet implementations of Conway's Game of Life"
@@ -96,6 +92,7 @@ def parse_args():
     parser.add_argument(
         "-P", "--preset",
         type=str,
+        metavar="FILE",
         help="Preset file (RANDOM if not specified)."
     )
 
@@ -106,29 +103,65 @@ def parse_args():
     )
 
     parser.add_argument(
-            "-C", "--threads",
-            type=int,
-            help="Number of Threads (default is 1)"
-        )
+        "-C", "--threads",
+        type=int,
+        help="Number of Threads (default is 1)"
+    )
 
     parser.add_argument(
-            "-R", "--seed",
-            type=int,
-            help="Random seed"
-        )
+        "-R", "--seed",
+        type=int,
+        help="Random seed"
+    )
+
+    parser.add_argument(
+        "-J", "--json",
+        type=str,
+        metavar="FILE",
+        help="Load arguments from a JSON file (command line options override it)."
+    )
 
     args = parser.parse_args()
 
-    # Set options to those specified
-    if args.size    : N = args.size
-    if args.steps   : T = args.steps
-    if args.preset  : wordfile = args.preset
-    if args.version : version = args.version
-    if args.debug   : debug_level = args.debug
-    if args.seed    : seed = args.seed
-    if args.threads : num_threads = args.threads
+    cfg = load_json(args.json) if args.json else {}
+
+    def pick(cli, key, current):
+        return cli if cli is not None else cfg.get(key, current)
+
+    N           = pick(args.size,    "size",    N)
+    T           = pick(args.steps,   "steps",   T)
+    wordfile    = pick(args.preset,  "preset",  wordfile)
+    version     = pick(args.version, "version", version)
+    debug_level = pick(args.debug,   "debug",   debug_level)
+    seed        = pick(args.seed,    "seed",    seed)
+    num_threads = pick(args.threads, "threads", num_threads)
+
+    # JSON-only options
+    compiler        = cfg.get("compiler", compiler)
+    compile_options = cfg.get("compile_options", compile_options)
     
     return args
+
+JSON_KEYS = {
+    "size", "steps", "version", "preset", "debug", "threads", "seed",
+    "compiler", "compile_options"
+}
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        sys.exit(f"Cannot read {path}: {e}")
+
+    if not isinstance(cfg, dict):
+        sys.exit(f"{path}: top level must be a JSON object")
+
+    unknown = set(cfg) - JSON_KEYS
+    if unknown:
+        sys.exit(f"{path}: unknown keys {sorted(unknown)}; allowed: {sorted(JSON_KEYS)}")
+
+    return cfg
 
 if __name__ == "__main__":
     main()

@@ -184,7 +184,7 @@ int simulate(CELL_TYPE** m0, CELL_TYPE** m1, size_t cycles)
         print_world(m1, m0, t, 0);
         fflush(stdout);
         //usleep(100000);
-        sleep(1);
+        //sleep(1);
         typeof(m0) mtmp = m0;
         m0 = m1;
         m1 = mtmp;
